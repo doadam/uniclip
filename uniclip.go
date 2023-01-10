@@ -30,9 +30,10 @@ var (
 	helpMsg                           = `Uniclip - Universal Clipboard
 With Uniclip, you can copy from one device and paste on another.
 
-Usage: uniclip [--secure/-s] [--debug/-d] [ <address> | --help/-h ]
+Usage: uniclip [--secure/-s] [--debug/-d] [--port/-p port for server] [ <address> | --help/-h ]
 Examples:
    uniclip                                   # start a new clipboard
+   uniclip -p 13337                          # start a new clipboard with a specific port to listen on
    uniclip 192.168.86.24:53701               # join the clipboard at 192.168.86.24:53701
    uniclip -d                                # start a new clipboard with debug output
    uniclip -d --secure 192.168.86.24:53701   # join the clipboard with debug output and enable encryption
@@ -46,6 +47,7 @@ Refer to https://github.com/quackduck/uniclip for more information`
 	cryptoStrength = 16384
 	secure         = false
 	password       []byte
+	port           = uint16(0)
 )
 
 // TODO: Add a way to reconnect (if computer goes to sleep)
@@ -75,6 +77,25 @@ func main() {
 		main()
 		return
 	}
+	// --port chooses a port when setting up a server
+	if hasOption, i := argsHaveOption("port", "p"); hasOption {
+		if i >= len(os.Args) {
+			handleError(fmt.Errorf("port number must come after -p"))
+			fmt.Println(helpMsg)
+			return
+		}
+		if _port, err := strconv.ParseInt(os.Args[i+1], 10, 16); err != nil {
+			handleError(fmt.Errorf("can't parse port: %v", err))
+			fmt.Println(helpMsg)
+			return
+		} else {
+			port = uint16(_port)
+		}
+		os.Args = removeElemFromSlice(os.Args, i)
+		os.Args = removeElemFromSlice(os.Args, i) // remove port number as well
+		main()
+		return
+	}
 	if hasOption, _ := argsHaveOption("version", "v"); hasOption {
 		fmt.Println(version)
 		return
@@ -88,7 +109,11 @@ func main() {
 
 func makeServer() {
 	fmt.Println("Starting a new clipboard")
-	l, err := net.Listen("tcp4", ":") //nolint // complains about binding to all interfaces
+	address := ":"
+	if port != 0 {
+		address += strconv.FormatUint(uint64(port), 10)
+	}
+	l, err := net.Listen("tcp4", address) //nolint // complains about binding to all interfaces
 	if err != nil {
 		handleError(err)
 		return
